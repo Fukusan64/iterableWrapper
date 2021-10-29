@@ -5,9 +5,15 @@ type count = number;
 export default class AsyncLazyIterable<T>{
   private cache: T[] = [];
 
-  constructor(public gen: AsyncGenerator<T>) {
-  }
+  constructor(
+    private gen: AsyncGenerator<T>,
+    private callback: (value: void) => unknown = () => undefined,
+    private shouldUseCache: boolean = true,
+  ) {}
 
+  /**
+   * index is 0 indexed index from next item, when use do not use cache mode
+   */
   $map<U>(cb: (val: T, index: number) => U): AsyncLazyIterable<U> {
     const gen = this[Symbol.asyncIterator]();
     return new AsyncLazyIterable(
@@ -18,13 +24,15 @@ export default class AsyncLazyIterable<T>{
           yield cb(current.value, index++);
           current = await gen.next();
         }
-      })()
+      })(),
+      this.callback,
+      this.shouldUseCache,
     );
   }
 
   /**
    * ```
-   * // count is the number of items from index 0
+   * // count is the number of items from index 0 or next item(use do not use cache mode)
    * $take(...args:
    *  [count] |
    *  [first, end]
@@ -34,7 +42,7 @@ export default class AsyncLazyIterable<T>{
   $take(...args: [count] | [first, end]): AsyncLazyIterable<T> {
     const [first, end] =
       args.length === 2 ? args : [0, args[0]]
-      ;
+    ;
 
     if (first < 0 || end < 0)
       new Error('Out of range Error')
@@ -50,10 +58,15 @@ export default class AsyncLazyIterable<T>{
           index++;
           current = await gen.next();
         }
-      })()
+      })(),
+      this.callback,
+      this.shouldUseCache,
     );
   }
 
+  /**
+   * index is 0 indexed index from next item, when use do not use cache mode
+   */
   $filter(cb: (value: T, index: number) => boolean): AsyncLazyIterable<T> {
     const gen = this[Symbol.asyncIterator]();
     return new AsyncLazyIterable(
@@ -64,10 +77,15 @@ export default class AsyncLazyIterable<T>{
           if (cb(current.value, index++)) yield current.value;
           current = await gen.next();
         }
-      })()
+      })(),
+      this.callback,
+      this.shouldUseCache,
     );
   }
 
+   /**
+   * index is 0 indexed index from next item, when use do not use cache mode
+   */
   async get(index: number): Promise<T> {
     if (index < 0) throw new Error('Out of range Error');
     const gen = this[Symbol.asyncIterator]();
@@ -78,9 +96,12 @@ export default class AsyncLazyIterable<T>{
       current = await gen.next();
     }
     if (current.done) throw new Error('Out of range Error');
-    return this.cache[index] = current.value;
+    return current.value;
   }
 
+  /**
+   * index is 0 indexed index from next item, when use do not use cache mode
+   */
   async find(cb: (value: T, index: number) => boolean): Promise<T | null> {
     const gen = this[Symbol.asyncIterator]();
     let current = await gen.next();
@@ -92,6 +113,9 @@ export default class AsyncLazyIterable<T>{
     return null;
   }
 
+  /**
+   * index is 0 indexed index from next item, when use do not use cache mode
+   */
   async findIndex(cb: (value: T, index: number) => boolean): Promise<number> {
     const gen = this[Symbol.asyncIterator]();
     let current = await gen.next();
@@ -104,13 +128,14 @@ export default class AsyncLazyIterable<T>{
   }
 
   async *[Symbol.asyncIterator](): AsyncIterator<T> {
-    yield* this.cache;
+    if (this.shouldUseCache) yield* this.cache;
     let current = await this.gen.next();
     while (!current.done) {
-      this.cache.push(current.value);
+      if (this.shouldUseCache) this.cache.push(current.value);
       yield current.value;
       current = await this.gen.next();
     }
+    this.callback();
   }
 
   async evaluate():Promise<Array<T>> {

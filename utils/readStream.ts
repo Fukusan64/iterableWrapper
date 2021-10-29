@@ -1,11 +1,10 @@
 import rl     from 'readline';
 import stream from 'stream';
 
-// eslint-disable-next-line @typescript-eslint/require-await
-export default async function* readStream(
+export default function readStream(
   stream: stream.Readable = process.stdin
-): AsyncIterableIterator<string> {
+): [AsyncIterableIterator<string>, () => void] {
   const readlineInterface = rl.createInterface({ input: stream });
   const readlineIterator = readlineInterface[Symbol.asyncIterator]();
-  yield* readlineIterator;
+  return [readlineIterator, readlineInterface.close.bind(readlineInterface)];
 }

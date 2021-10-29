@@ -25,24 +25,48 @@ const isAsyncGenerator = <T>(value: unknown): value is AsyncGenerator<T> => {
   return wObj.constructor instanceof (async function * () {/* */}).constructor;
 };
 
-function $<T>(value: Generator<T>      | Iterable<T>     ): LazyIterable<T>;
-function $<T>(value: AsyncGenerator<T> | AsyncIterable<T>): AsyncLazyIterable<T>;
 function $<T>(
-  value: Generator<T> | Iterable<T> | AsyncGenerator<T> | AsyncIterable<T>
+  value: Generator<T> | Iterable<T>,
+  callback?: () => unknown,
+  shouldUseCache?: boolean
+): LazyIterable<T>;
+function $<T>(
+  value: AsyncGenerator<T> | AsyncIterable<T>,
+  callback?: () => unknown,
+  shouldUseCache?: boolean
+): AsyncLazyIterable<T>;
+function $<T>(
+  value: Generator<T> | Iterable<T> | AsyncGenerator<T> | AsyncIterable<T>,
+  callback: () => unknown = () => undefined,
+  shouldUseCache = true,
 ): LazyIterable<T> | AsyncLazyIterable<T> {
   if (isGenerator(value)) {
-    return new LazyIterable(value);
+    return new LazyIterable(
+      value,
+      callback,
+      shouldUseCache,
+    );
   } else if (isIterable(value)) {
-    return new LazyIterable((
-      function* () { yield* value; }
-    )());
+      return new LazyIterable((
+        function* () { yield* value; }
+      )(),
+      callback,
+      shouldUseCache,
+    );
   } else if (isAsyncGenerator(value)) {
-    return new AsyncLazyIterable(value);
+    return new AsyncLazyIterable(
+      value,
+      callback,
+      shouldUseCache,
+    );
   } else if (isAsyncIterable(value)) {
-    return new AsyncLazyIterable((
-      // eslint-disable-next-line @typescript-eslint/require-await
-      async function* () { yield* value; }
-    )());
+      return new AsyncLazyIterable((
+        // eslint-disable-next-line @typescript-eslint/require-await
+        async function* () { yield* value; }
+      )(),
+      callback,
+      shouldUseCache,
+    );
   }
   throw new TypeError('value is not generator or iterator');
 }

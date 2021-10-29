@@ -5,9 +5,14 @@ type count = number;
 export default class LazyIterable<T>{
   private cache: T[] = [];
 
-  constructor(public gen: Generator<T>) {
-  }
+  constructor(
+    private gen: Generator<T>,
+    private callback: (value: void) => unknown = () => undefined,
+    private shouldUseCache: boolean = true) {}
 
+  /**
+   * index is 0 indexed index from next item, when use do not use cache mode
+   */
   $map<U>(cb:(val: T, index: number) => U): LazyIterable<U> {
     const gen = this[Symbol.iterator]();
     return new LazyIterable(
@@ -18,13 +23,15 @@ export default class LazyIterable<T>{
           yield cb(current.value, index++);
           current = gen.next();
         }
-      })()
+      })(),
+      this.callback,
+      this.shouldUseCache,
     );
   }
 
   /**
    * ```
-   * // count is the number of items from index 0
+   * // count is the number of items from index 0 or next item(use do not use cache mode)
    * $take(...args:
    *  [count] |
    *  [first, end]
@@ -50,10 +57,15 @@ export default class LazyIterable<T>{
           index++;
           current = gen.next();
         }
-      })()
+      })(),
+      this.callback,
+      this.shouldUseCache,
     );
   }
 
+  /**
+   * index is 0 indexed index from next item, when use do not use cache mode
+   */
   $filter(cb: (value: T, index: number) => boolean): LazyIterable<T> {
     const gen = this[Symbol.iterator]();
     return new LazyIterable(
@@ -64,10 +76,15 @@ export default class LazyIterable<T>{
           if (cb(current.value, index++)) yield current.value;
           current = gen.next();
         }
-      })()
+      })(),
+      this.callback,
+      this.shouldUseCache,
     );
   }
 
+  /**
+   * index is 0 indexed index from next item, when use do not use cache mode
+   */
   get(index: number): T {
     if (index < 0) throw new Error('Out of range Error');
     const gen = this[Symbol.iterator]();
@@ -78,9 +95,12 @@ export default class LazyIterable<T>{
       current = gen.next();
     }
     if (current.done) throw new Error('Out of range Error');
-    return this.cache[index] = current.value;
+    return current.value;
   }
 
+  /**
+   * index is 0 indexed index from next item, when use do not use cache mode
+   */
   find(cb: (value: T, index: number) => boolean): T | null {
     const gen = this[Symbol.iterator]();
     let current = gen.next();
@@ -92,6 +112,9 @@ export default class LazyIterable<T>{
     return null;
   }
 
+  /**
+   * index is 0 indexed index from next item, when use do not use cache mode
+   */
   findIndex(cb: (value: T, index: number) => boolean): number {
     const gen = this[Symbol.iterator]();
     let current = gen.next();
@@ -104,13 +127,14 @@ export default class LazyIterable<T>{
   }
 
   * [Symbol.iterator](): Iterator<T> {
-    yield* this.cache;
+    if (this.shouldUseCache) yield* this.cache;
     let current = this.gen.next();
     while (!current.done) {
-      this.cache.push(current.value);
+      if (this.shouldUseCache) this.cache.push(current.value);
       yield current.value;
       current = this.gen.next();
     }
+    this.callback();
   }
 
   evaluate():Array<T> {
